@@ -49,6 +49,7 @@ public abstract class AbstractLSMIndexFileManager implements ILSMIndexFileManage
     public static final String SPLIT_STRING = "_";
     protected static final String BLOOM_FILTER_STRING = "f";
     protected static final String TRANSACTION_PREFIX = ".T";
+    protected static final String STATISTICS_STRING = "s";
 
     protected final IFileMapProvider fileMapProvider;
 
@@ -117,8 +118,8 @@ public abstract class AbstractLSMIndexFileManager implements ILSMIndexFileManage
     }
 
     protected void validateFiles(HashSet<String> groundTruth, ArrayList<ComparableFileName> validFiles,
-            FilenameFilter filter, TreeIndexFactory<? extends ITreeIndex> treeFactory) throws HyracksDataException,
-            IndexException {
+            FilenameFilter filter, TreeIndexFactory<? extends ITreeIndex> treeFactory)
+                    throws HyracksDataException, IndexException {
         ArrayList<ComparableFileName> tmpAllInvListsFiles = new ArrayList<ComparableFileName>();
         cleanupAndGetValidFilesInternal(filter, treeFactory, tmpAllInvListsFiles);
         for (ComparableFileName cmpFileName : tmpAllInvListsFiles) {
@@ -173,7 +174,7 @@ public abstract class AbstractLSMIndexFileManager implements ILSMIndexFileManage
     public LSMComponentFileReferences getRelFlushFileReference() {
         String ts = getCurrentTimestamp();
         // Begin timestamp and end timestamp are identical since it is a flush
-        return new LSMComponentFileReferences(createFlushFile(baseDir + ts + SPLIT_STRING + ts), null, null);
+        return new LSMComponentFileReferences(createFlushFile(baseDir + ts + SPLIT_STRING + ts), null, null, null);
     }
 
     @Override
@@ -182,8 +183,9 @@ public abstract class AbstractLSMIndexFileManager implements ILSMIndexFileManage
         String[] firstTimestampRange = firstFileName.split(SPLIT_STRING);
         String[] lastTimestampRange = lastFileName.split(SPLIT_STRING);
         // Get the range of timestamps by taking the earliest and the latest timestamps
-        return new LSMComponentFileReferences(createMergeFile(baseDir + firstTimestampRange[0] + SPLIT_STRING
-                + lastTimestampRange[1]), null, null);
+        return new LSMComponentFileReferences(
+                createMergeFile(baseDir + firstTimestampRange[0] + SPLIT_STRING + lastTimestampRange[1]), null, null,
+                null);
     }
 
     @Override
@@ -203,7 +205,7 @@ public abstract class AbstractLSMIndexFileManager implements ILSMIndexFileManage
         }
 
         if (allFiles.size() == 1) {
-            validFiles.add(new LSMComponentFileReferences(allFiles.get(0).fileRef, null, null));
+            validFiles.add(new LSMComponentFileReferences(allFiles.get(0).fileRef, null, null, null));
             return validFiles;
         }
 
@@ -235,7 +237,7 @@ public abstract class AbstractLSMIndexFileManager implements ILSMIndexFileManage
         // Sort valid files in reverse lexicographical order, such that newer files come first.
         Collections.sort(validComparableFiles, recencyCmp);
         for (ComparableFileName cmpFileName : validComparableFiles) {
-            validFiles.add(new LSMComponentFileReferences(cmpFileName.fileRef, null, null));
+            validFiles.add(new LSMComponentFileReferences(cmpFileName.fileRef, null, null, null));
         }
 
         return validFiles;
@@ -375,8 +377,8 @@ public abstract class AbstractLSMIndexFileManager implements ILSMIndexFileManage
     };
 
     protected static FilenameFilter createTransactionFilter(String transactionFileName, final boolean inclusive) {
-        final String timeStamp = transactionFileName.substring(transactionFileName.indexOf(TRANSACTION_PREFIX)
-                + TRANSACTION_PREFIX.length());
+        final String timeStamp = transactionFileName
+                .substring(transactionFileName.indexOf(TRANSACTION_PREFIX) + TRANSACTION_PREFIX.length());
         return new FilenameFilter() {
             @Override
             public boolean accept(File dir, String name) {

@@ -101,15 +101,15 @@ public abstract class AbstractLSMRTree extends AbstractLSMIndex implements ITree
         for (IVirtualBufferCache virtualBufferCache : virtualBufferCaches) {
             RTree memRTree = new RTree(virtualBufferCache, virtualBufferCache.getFileMapProvider(),
                     new VirtualFreePageManager(virtualBufferCache.getNumPages()), rtreeInteriorFrameFactory,
-                    rtreeLeafFrameFactory, rtreeCmpFactories, fieldCount, new FileReference(new File(
-                            fileManager.getBaseDir() + "_virtual_r_" + i)));
+                    rtreeLeafFrameFactory, rtreeCmpFactories, fieldCount,
+                    new FileReference(new File(fileManager.getBaseDir() + "_virtual_r_" + i)));
             BTree memBTree = new BTree(virtualBufferCache, virtualBufferCache.getFileMapProvider(),
                     new VirtualFreePageManager(virtualBufferCache.getNumPages()), btreeInteriorFrameFactory,
-                    btreeLeafFrameFactory, btreeCmpFactories, btreeCmpFactories.length, new FileReference(new File(
-                            fileManager.getBaseDir() + "_virtual_b_" + i)));
+                    btreeLeafFrameFactory, btreeCmpFactories, btreeCmpFactories.length,
+                    new FileReference(new File(fileManager.getBaseDir() + "_virtual_b_" + i)));
             LSMRTreeMemoryComponent mutableComponent = new LSMRTreeMemoryComponent(memRTree, memBTree,
-                    virtualBufferCache, i == 0 ? true : false, filterFactory == null ? null
-                            : filterFactory.createLSMComponentFilter());
+                    virtualBufferCache, i == 0 ? true : false,
+                    filterFactory == null ? null : filterFactory.createLSMComponentFilter());
             memoryComponents.add(mutableComponent);
             ++i;
         }
@@ -309,11 +309,10 @@ public abstract class AbstractLSMRTree extends AbstractLSMIndex implements ITree
 
     protected LSMRTreeDiskComponent createDiskComponent(ILSMComponentFactory factory, FileReference insertFileRef,
             FileReference deleteFileRef, FileReference bloomFilterFileRef, boolean createComponent)
-            throws HyracksDataException, IndexException {
+                    throws HyracksDataException, IndexException {
         // Create new tree instance.
-        LSMRTreeDiskComponent component = (LSMRTreeDiskComponent) factory
-                .createLSMComponentInstance(new LSMComponentFileReferences(insertFileRef, deleteFileRef,
-                        bloomFilterFileRef));
+        LSMRTreeDiskComponent component = (LSMRTreeDiskComponent) factory.createLSMComponentInstance(
+                new LSMComponentFileReferences(insertFileRef, deleteFileRef, bloomFilterFileRef, null));
         if (createComponent) {
             component.getRTree().create();
             if (component.getBTree() != null) {
@@ -407,8 +406,8 @@ public abstract class AbstractLSMRTree extends AbstractLSMIndex implements ITree
         }
         if (ctx.filterTuple != null) {
             ctx.filterTuple.reset(tuple);
-            memoryComponents.get(currentMutableComponentId.get()).getLSMComponentFilter()
-                    .update(ctx.filterTuple, ctx.filterCmp);
+            memoryComponents.get(currentMutableComponentId.get()).getLSMComponentFilter().update(ctx.filterTuple,
+                    ctx.filterCmp);
         }
     }
 

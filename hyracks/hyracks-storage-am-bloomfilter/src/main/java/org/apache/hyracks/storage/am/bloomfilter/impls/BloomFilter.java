@@ -26,12 +26,13 @@ import org.apache.hyracks.api.io.FileReference;
 import org.apache.hyracks.dataflow.common.data.accessors.ITupleReference;
 import org.apache.hyracks.storage.am.common.api.IIndexBulkLoader;
 import org.apache.hyracks.storage.am.common.api.IndexException;
+import org.apache.hyracks.storage.am.common.impls.AbstractFileManager;
 import org.apache.hyracks.storage.common.buffercache.IBufferCache;
 import org.apache.hyracks.storage.common.buffercache.ICachedPage;
 import org.apache.hyracks.storage.common.file.BufferedFileHandle;
 import org.apache.hyracks.storage.common.file.IFileMapProvider;
 
-public class BloomFilter {
+public class BloomFilter extends AbstractFileManager {
 
     private final static int METADATA_PAGE_ID = 0;
     private final static int NUM_PAGES_OFFSET = 0; // 0
@@ -39,12 +40,7 @@ public class BloomFilter {
     private final static int NUM_ELEMENTS_OFFSET = NUM_HASHES_USED_OFFSET + 4; // 8
     private final static int NUM_BITS_OFFSET = NUM_ELEMENTS_OFFSET + 8; // 12
 
-    private final IBufferCache bufferCache;
-    private final IFileMapProvider fileMapProvider;
-    private final FileReference file;
     private final int[] keyFields;
-    private int fileId = -1;
-    private boolean isActivated = false;
 
     private int numPages;
     private int numHashes;
@@ -56,19 +52,9 @@ public class BloomFilter {
 
     public BloomFilter(IBufferCache bufferCache, IFileMapProvider fileMapProvider, FileReference file, int[] keyFields)
             throws HyracksDataException {
-        this.bufferCache = bufferCache;
-        this.fileMapProvider = fileMapProvider;
-        this.file = file;
+        super(bufferCache, fileMapProvider, file);
         this.keyFields = keyFields;
         this.numBitsPerPage = bufferCache.getPageSize() * Byte.SIZE;
-    }
-
-    public int getFileId() {
-        return fileId;
-    }
-
-    public FileReference getFileReference() {
-        return file;
     }
 
     public int getNumPages() throws HyracksDataException {
@@ -94,8 +80,8 @@ public class BloomFilter {
             long hash = Math.abs((hashes[0] + i * hashes[1]) % numBits);
 
             // we increment the page id by one, since the metadata page id of the filter is 0.
-            ICachedPage page = bufferCache.pin(
-                    BufferedFileHandle.getDiskPageId(fileId, (int) (hash / numBitsPerPage) + 1), false);
+            ICachedPage page = bufferCache
+                    .pin(BufferedFileHandle.getDiskPageId(fileId, (int) (hash / numBitsPerPage) + 1), false);
             page.acquireReadLatch();
             try {
                 ByteBuffer buffer = page.getBuffer();
@@ -115,32 +101,15 @@ public class BloomFilter {
         return true;
     }
 
-    private void prepareFile() throws HyracksDataException {
-        boolean fileIsMapped = false;
-        synchronized (fileMapProvider) {
-            fileIsMapped = fileMapProvider.isMapped(file);
-            if (!fileIsMapped) {
-                bufferCache.createFile(file);
-            }
-            fileId = fileMapProvider.lookupFileId(file);
-            try {
-                // Also creates the file if it doesn't exist yet.
-                bufferCache.openFile(fileId);
-            } catch (HyracksDataException e) {
-                // Revert state of buffer cache since file failed to open.
-                if (!fileIsMapped) {
-                    bufferCache.deleteFile(fileId, false);
-                }
-                throw e;
-            }
-        }
+    @Override
+    public synchronized void create() throws HyracksDataException {
+        super.create();
+
+        initBloomFilterMetaData();
+        bufferCache.closeFile(fileId);
     }
 
-    public synchronized void create() throws HyracksDataException {
-        if (isActivated) {
-            throw new HyracksDataException("Failed to create the bloom filter since it is activated.");
-        }
-        prepareFile();
+    private void initBloomFilterMetaData() throws HyracksDataException {
         ICachedPage metaPage = bufferCache.pin(BufferedFileHandle.getDiskPageId(fileId, METADATA_PAGE_ID), true);
         metaPage.acquireWriteLatch();
         try {
@@ -152,17 +121,13 @@ public class BloomFilter {
             metaPage.releaseWriteLatch(true);
             bufferCache.unpin(metaPage);
         }
-        bufferCache.closeFile(fileId);
     }
 
+    @Override
     public synchronized void activate() throws HyracksDataException {
-        if (isActivated) {
-            return;
-        }
+        super.activate();
 
-        prepareFile();
         readBloomFilterMetaData();
-        isActivated = true;
     }
 
     private void readBloomFilterMetaData() throws HyracksDataException {
@@ -177,27 +142,6 @@ public class BloomFilter {
             metaPage.releaseReadLatch();
             bufferCache.unpin(metaPage);
         }
-    }
-
-    public synchronized void deactivate() throws HyracksDataException {
-        if (!isActivated) {
-            return;
-        }
-        bufferCache.closeFile(fileId);
-        isActivated = false;
-    }
-
-    public synchronized void destroy() throws HyracksDataException {
-        if (isActivated) {
-            throw new HyracksDataException("Failed to destroy the bloom filter since it is activated.");
-        }
-
-        file.delete();
-        if (fileId == -1) {
-            return;
-        }
-        bufferCache.deleteFile(fileId, false);
-        fileId = -1;
     }
 
     public IIndexBulkLoader createBuilder(long numElements, int numHashes, int numBitsPerElement)
@@ -279,8 +223,8 @@ public class BloomFilter {
                 long hash = Math.abs((hashes[0] + i * hashes[1]) % numBits);
 
                 // we increment the page id by one, since the metadata page id of the filter is 0.
-                ICachedPage page = bufferCache.pin(
-                        BufferedFileHandle.getDiskPageId(fileId, (int) (hash / numBitsPerPage) + 1), false);
+                ICachedPage page = bufferCache
+                        .pin(BufferedFileHandle.getDiskPageId(fileId, (int) (hash / numBitsPerPage) + 1), false);
                 page.acquireWriteLatch();
                 try {
                     ByteBuffer buffer = page.getBuffer();
